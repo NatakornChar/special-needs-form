@@ -710,17 +710,35 @@ async function submitForm(e){
   }
 }
 
-async function apiGet(action, params = {}){
-  if(API_URL.includes('PASTE_YOUR')){
-    throw new Error('กรุณาใส่ API_URL ของ Apps Script ในไฟล์ index.html');
-  }
+function apiGet(action, params = {}) {
+  return new Promise((resolve, reject) => {
+    const callbackName = 'jsonp_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
 
-  const qs = new URLSearchParams({ action, ...params });
-  const res = await fetch(`${API_URL}?${qs.toString()}`);
-  const data = await res.json();
+    params.action = action;
+    params.callback = callbackName;
 
-  if(data.status === 'error') throw new Error(data.message);
-  return data;
+    const qs = new URLSearchParams(params).toString();
+    const script = document.createElement('script');
+
+    window[callbackName] = function(data) {
+      delete window[callbackName];
+      document.body.removeChild(script);
+
+      if (data.status === 'error') {
+        reject(new Error(data.message));
+      } else {
+        resolve(data);
+      }
+    };
+
+    script.onerror = function() {
+      delete window[callbackName];
+      reject(new Error('โหลดข้อมูลจาก Apps Script ไม่สำเร็จ'));
+    };
+
+    script.src = API_URL + '?' + qs;
+    document.body.appendChild(script);
+  });
 }
 
 function safeResetForm(){
