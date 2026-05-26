@@ -1,17 +1,38 @@
 const SPREADSHEET_NAME = 'แบบสังเกตนักเรียนที่มีความต้องการพิเศษ';
 
 function doGet(e) {
-  const action = (e && e.parameter && e.parameter.action) ? e.parameter.action : '';
+  const action = e.parameter.action || '';
+  const callback = e.parameter.callback || '';
 
   try {
-    if (action === 'initial') return jsonOutput_(getInitialData());
-    if (action === 'teachers') return jsonOutput_(getTeachersByDepartment(e.parameter.department || ''));
-    if (action === 'rooms') return jsonOutput_(getStudentFilters(e.parameter.department || '', e.parameter.level || ''));
-    if (action === 'students') return jsonOutput_(getStudents(e.parameter.department || '', e.parameter.level || '', e.parameter.room || ''));
+    let result;
 
-    return jsonOutput_({ status: 'ok', message: 'API พร้อมใช้งาน' });
+    if (action === 'initial') {
+      result = getInitialData();
+    } else if (action === 'teachers') {
+      result = getTeachersByDepartment(e.parameter.department || '');
+    } else if (action === 'rooms') {
+      result = getStudentFilters(e.parameter.department || '', e.parameter.level || '');
+    } else if (action === 'students') {
+      result = getStudents(
+        e.parameter.department || '',
+        e.parameter.level || '',
+        e.parameter.room || ''
+      );
+    } else {
+      result = {
+        status: 'success',
+        message: 'API พร้อมใช้งาน'
+      };
+    }
+
+    return jsonOutput_(result, callback);
+
   } catch (err) {
-    return jsonOutput_({ status: 'error', message: err.message });
+    return jsonOutput_({
+      status: 'error',
+      message: err.message
+    }, callback);
   }
 }
 
@@ -24,9 +45,17 @@ function doPost(e) {
   }
 }
 
-function jsonOutput_(obj) {
+function jsonOutput_(obj, callback) {
+  const json = JSON.stringify(obj);
+
+  if (callback) {
+    return ContentService
+      .createTextOutput(callback + '(' + json + ')')
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+
   return ContentService
-    .createTextOutput(JSON.stringify(obj))
+    .createTextOutput(json)
     .setMimeType(ContentService.MimeType.JSON);
 }
 
