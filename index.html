@@ -843,7 +843,7 @@ function showLoading(v){
 function handleError(err){
   console.error(err);
   showLoading(false);
-  toast(err && err.message ? err.message : String(err), 'err');
+  toast(err && err.message ? err.message : String(err), 'err'); 
 }
 
 function toast(msg,type){
