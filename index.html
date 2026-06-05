@@ -34,6 +34,10 @@
     input:focus,select:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(21,101,192,.12)}
     textarea{min-height:130px;resize:vertical}
     .readonly{background:#f3f6fa;color:#666}
+    .file-box{margin-top:18px;background:#f8fbff;border:2px dashed #b9cee8;border-radius:14px;padding:16px}
+    .file-box input[type=file]{background:#fff;padding:14px}
+    .help-text{display:block;margin-top:8px;color:#6b7280;font-size:14px;line-height:1.5}
+    .subject-help{display:block;margin-top:8px;color:#6b7280;font-size:14px;line-height:1.5}
     .note{background:var(--warn);border:2px solid var(--warn-line);border-radius:12px;color:#7a4b00;padding:16px 20px;margin-bottom:22px;font-weight:600}
     .chips{display:flex;gap:12px;flex-wrap:wrap}
     .chip{border:2px solid #b9cee8;border-radius:999px;padding:12px 22px;background:#fff;font-weight:700;cursor:pointer;user-select:none}
@@ -113,7 +117,10 @@
             </div>
             <div>
               <label>วิชาที่สอน / รายวิชาที่พบพฤติกรรม</label>
-              <input id="subjectName" placeholder="เช่น การเขียนโปรแกรมเบื้องต้น">
+              <input id="subjectName" placeholder="ครูผู้สอนกรอกชื่อวิชาที่สอน เช่น การเขียนโปรแกรมเบื้องต้น">
+              <small class="subject-help">
+                📌 ช่องนี้กรอกเฉพาะกรณีเป็น <b>ครูผู้สอน</b> หากเป็น <b>ครูที่ปรึกษา</b> สามารถเว้นว่างได้
+              </small>
             </div>
             <div>
               <label>วันที่กรอก</label>
@@ -174,17 +181,8 @@
         <div class="section-title"><div class="num">3</div>บัตรประจำตัวคนพิการ</div>
         <div class="body">
           <label>นักเรียนมีบัตรประจำตัวคนพิการหรือไม่? <span class="req">*</span></label>
-         <div id="cardUploadSection">
-
-  <label>แนบไฟล์บัตรประจำตัวคนพิการ (PDF)</label>
-
-  <input
-    type="file"
-    id="disabilityCardFile"
-    accept=".pdf"
-  >
-
-</div>
+          <div class="chips" id="cardChips"></div>
+          <input type="hidden" id="disabilityCardStatus" required>
 
           <div id="cardDetail" class="hidden">
             <div class="divider"></div>
@@ -208,22 +206,30 @@
               <label>หน่วยงานที่ออกบัตร</label>
               <input id="cardIssuer" placeholder="เช่น สำนักงานพัฒนาสังคมและความมั่นคงของมนุษย์จังหวัด...">
             </div>
+
+            <div id="cardUploadSection" class="file-box">
+              <label>แนบไฟล์บัตรประจำตัวคนพิการ (PDF)</label>
+              <input type="file" id="disabilityCardFile" accept="application/pdf,.pdf">
+              <small class="help-text">รองรับไฟล์ PDF เท่านั้น แนะนำขนาดไม่เกิน 5 MB</small>
+            </div>
           </div>
 
           <div class="divider"></div>
 
           <label>มีใบรับรองแพทย์ / เอกสารการวินิจฉัยหรือไม่? <span class="req">*</span></label>
-         <div id="medicalUploadSection">
+          <select id="medicalDocumentStatus" required>
+            <option value="">— เลือก —</option>
+            <option>มี</option>
+            <option>ไม่มี</option>
+            <option>ไม่ทราบ</option>
+            <option>อยู่ระหว่างดำเนินการ</option>
+          </select>
 
-  <label>แนบใบรับรองแพทย์ / เอกสารวินิจฉัย (PDF)</label>
-
-  <input
-    type="file"
-    id="medicalFile"
-    accept=".pdf"
-  >
-
-</div>
+          <div id="medicalUploadSection" class="file-box hidden">
+            <label>แนบใบรับรองแพทย์ / เอกสารวินิจฉัย (PDF)</label>
+            <input type="file" id="medicalFile" accept="application/pdf,.pdf">
+            <small class="help-text">แสดงเมื่อเลือก “มี” หรือ “อยู่ระหว่างดำเนินการ”</small>
+          </div>
 
         </div>
       </section>
@@ -491,6 +497,13 @@ function bindEvents(){
     updateProgress();
   });
 
+  on('medicalDocumentStatus','change', () => {
+    const st = val('medicalDocumentStatus');
+    const box = document.getElementById('medicalUploadSection');
+    if (box) box.classList.toggle('hidden', !(st === 'มี' || st === 'อยู่ระหว่างดำเนินการ'));
+    updateProgress();
+  });
+
   on('studentSelect','change', () => {
     const s = studentCache.find(x => x.studentId === val('studentSelect'));
 
@@ -702,13 +715,30 @@ async function submitForm(e){
   document.getElementById('submitBtn').disabled = true;
 
   try{
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
-    });
+    const disabilityFile = document.getElementById('disabilityCardFile')?.files[0];
+    const medicalFile = document.getElementById('medicalFile')?.files[0];
 
-    const result = await res.json();
+    if (disabilityFile) {
+      validatePdfFile(disabilityFile);
+      payload.disabilityCardFile = await fileToBase64(disabilityFile);
+      payload.disabilityCardFileName = disabilityFile.name;
+    } else {
+      payload.disabilityCardFile = '';
+      payload.disabilityCardFileName = '';
+    }
+
+    if (medicalFile) {
+      validatePdfFile(medicalFile);
+      payload.medicalFile = await fileToBase64(medicalFile);
+      payload.medicalFileName = medicalFile.name;
+    } else {
+      payload.medicalFile = '';
+      payload.medicalFileName = '';
+    }
+
+    const result = await apiGet('save', {
+      data: JSON.stringify(payload)
+    });
 
     if(result.status === 'error') throw new Error(result.message);
 
@@ -723,6 +753,7 @@ async function submitForm(e){
     showLoading(false);
   }
 }
+
 
 function apiGet(action, params = {}) {
   return new Promise((resolve, reject) => {
@@ -764,6 +795,8 @@ function safeResetForm(){
   document.querySelectorAll('.accordion').forEach(x => x.classList.remove('open'));
 
   document.getElementById('cardDetail').classList.add('hidden');
+  const medicalBox = document.getElementById('medicalUploadSection');
+  if (medicalBox) medicalBox.classList.add('hidden');
 
   clearStudent();
   resetSelect('teacherName', '— เลือกแผนกก่อน —', true);
@@ -878,54 +911,37 @@ function escapeHtml(s){
   }[m]));
 }
 
-async function fileToBase64(file) {
+function validatePdfFile(file) {
+  const maxSize = 5 * 1024 * 1024;
 
+  if (!file) return;
+
+  const isPdf =
+    file.type === 'application/pdf' ||
+    file.name.toLowerCase().endsWith('.pdf');
+
+  if (!isPdf) {
+    throw new Error('กรุณาแนบไฟล์ PDF เท่านั้น');
+  }
+
+  if (file.size > maxSize) {
+    throw new Error('ไฟล์ PDF ต้องมีขนาดไม่เกิน 5 MB');
+  }
+}
+
+function fileToBase64(file) {
   return new Promise((resolve,reject)=>{
-
     const reader = new FileReader();
 
     reader.onload = () => {
-
-      resolve(reader.result.split(',')[1]);
-
+      resolve(String(reader.result).split(',')[1]);
     };
 
-    reader.onerror = reject;
+    reader.onerror = () => reject(new Error('อ่านไฟล์ PDF ไม่สำเร็จ'));
 
     reader.readAsDataURL(file);
-
   });
-
 }
-
-const disabilityFile =
-document.getElementById('disabilityCardFile').files[0];
-
-const medicalFile =
-document.getElementById('medicalFile').files[0];
-
-let disabilityBase64 = '';
-let medicalBase64 = '';
-
-if(disabilityFile){
-
-  disabilityBase64 =
-  await fileToBase64(disabilityFile);
-
-}
-
-if(medicalFile){
-
-  medicalBase64 =
-  await fileToBase64(medicalFile);
-
-}
-
-payload.disabilityCardFile = disabilityBase64;
-payload.disabilityCardFileName = disabilityFile?.name || '';
-
-payload.medicalFile = medicalBase64;
-payload.medicalFileName = medicalFile?.name || '';
 </script>
 </body>
 </html>
