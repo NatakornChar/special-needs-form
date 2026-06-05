@@ -1,5 +1,7 @@
 const SPREADSHEET_ID = '1mr5oYvOON8rS7LqEgbPz6V4gmuigHhPtv5VcDQVY8v4';
-const SPREADSHEET_NAME = 'แบบสังเกตนักเรียนที่มีความต้องการพิเศษ';
+
+const DISABILITY_FOLDER_ID = 'ใส่ Folder ID บัตรพิการ';
+const MEDICAL_FOLDER_ID = 'ใส่ Folder ID ใบรับรองแพทย์';
 
 function setupSystem() {
   const ss = getSS_();
@@ -20,7 +22,14 @@ function setupSystem() {
     'ครูที่ปรึกษา'
   ]);
 
-  createSheetIfNotExists_(ss, 'Responses', [
+  createSheetIfNotExists_(ss, 'Responses', getResponseHeaders_());
+
+  SpreadsheetApp.flush();
+  Logger.log('setupSystem สำเร็จ');
+}
+
+function getResponseHeaders_() {
+  return [
     'Timestamp',
     'วันที่กรอก',
     'แผนกครู',
@@ -51,11 +60,10 @@ function setupSystem() {
     'ผู้ปกครองรับทราบ',
     'การพูดคุย/ประสานงานเบื้องต้น',
     'ระดับความเร่งด่วน',
-    'ข้อสังเกตเพิ่มเติม'
-  ]);
-
-  SpreadsheetApp.flush();
-  Logger.log('setupSystem สำเร็จ: ' + ss.getUrl());
+    'ข้อสังเกตเพิ่มเติม',
+    'ลิงก์บัตรพิการ',
+    'ลิงก์ใบรับรองแพทย์'
+  ];
 }
 
 function doGet(e) {
@@ -75,14 +83,10 @@ function doGet(e) {
     } else if (action === 'students') {
       result = getStudents_(params.department || '', params.level || '', params.room || '');
     } else if (action === 'save') {
-      const dataText = params.data || '{}';
-      const data = JSON.parse(dataText);
+      const data = JSON.parse(params.data || '{}');
       result = saveObservation_(data);
     } else {
-      result = {
-        status: 'success',
-        message: 'API พร้อมใช้งาน'
-      };
+      result = { status: 'success', message: 'API พร้อมใช้งาน' };
     }
 
     return output_(result, callback);
@@ -95,27 +99,13 @@ function doGet(e) {
   }
 }
 
-function doPost(e) {
-  try {
-    const data = JSON.parse(e.postData.contents || '{}');
-    const result = saveObservation_(data);
-    return output_(result, '');
-  } catch (err) {
-    return output_({
-      status: 'error',
-      message: err && err.message ? err.message : String(err)
-    }, '');
-  }
-}
-
 function getInitialData_() {
   const ss = getSS_();
-
   const teacherSheet = ss.getSheetByName('Teachers');
   const studentSheet = ss.getSheetByName('Students');
 
-  if (!teacherSheet) throw new Error('ไม่พบชีต Teachers กรุณารัน setupSystem()');
-  if (!studentSheet) throw new Error('ไม่พบชีต Students กรุณารัน setupSystem()');
+  if (!teacherSheet) throw new Error('ไม่พบชีต Teachers');
+  if (!studentSheet) throw new Error('ไม่พบชีต Students');
 
   const teacherData = teacherSheet.getDataRange().getValues().slice(1);
   const studentData = studentSheet.getDataRange().getValues().slice(1);
@@ -130,8 +120,6 @@ function getInitialData_() {
 function getTeachersByDepartment_(department) {
   const ss = getSS_();
   const sh = ss.getSheetByName('Teachers');
-  if (!sh) throw new Error('ไม่พบชีต Teachers');
-
   const dep = clean_(department);
   const data = sh.getDataRange().getValues().slice(1);
 
@@ -147,8 +135,6 @@ function getTeachersByDepartment_(department) {
 function getStudentFilters_(department, level) {
   const ss = getSS_();
   const sh = ss.getSheetByName('Students');
-  if (!sh) throw new Error('ไม่พบชีต Students');
-
   const dep = clean_(department);
   const lv = clean_(level);
   const data = sh.getDataRange().getValues().slice(1);
@@ -165,8 +151,6 @@ function getStudentFilters_(department, level) {
 function getStudents_(department, level, room) {
   const ss = getSS_();
   const sh = ss.getSheetByName('Students');
-  if (!sh) throw new Error('ไม่พบชีต Students');
-
   const dep = clean_(department);
   const lv = clean_(level);
   const rm = clean_(room);
@@ -188,9 +172,9 @@ function getStudents_(department, level, room) {
         level: clean_(r[1]),
         room: clean_(r[2]),
         studentId: clean_(r[3]),
-        prefix: prefix,
-        firstName: firstName,
-        lastName: lastName,
+        prefix,
+        firstName,
+        lastName,
         fullName: `${prefix} ${firstName}  ${lastName}`.trim(),
         advisorTeacher: clean_(r[7])
       };
@@ -198,26 +182,25 @@ function getStudents_(department, level, room) {
 }
 
 function saveObservation_(data) {
-
-  
   const ss = getSS_();
   const sh = ss.getSheetByName('Responses');
-  if (!sh) throw new Error('ไม่พบชีต Responses กรุณารัน setupSystem()');
+  if (!sh) throw new Error('ไม่พบชีต Responses');
+
+  ensureHeaders_(sh, getResponseHeaders_());
 
   const c = data.categories || {};
 
+  const disabilityLink = uploadPdf_(
+    data.disabilityCardFile,
+    data.disabilityCardFileName,
+    DISABILITY_FOLDER_ID
+  );
 
-const disabilityLink = uploadPdf(
-  data.disabilityCardFile,
-  data.disabilityCardFileName,
-  DISABILITY_FOLDER_ID
-);
-
-const medicalLink = uploadPdf(
-  data.medicalFile,
-  data.medicalFileName,
-  MEDICAL_FOLDER_ID
-);
+  const medicalLink = uploadPdf_(
+    data.medicalFile,
+    data.medicalFileName,
+    MEDICAL_FOLDER_ID
+  );
 
   sh.appendRow([
     new Date(),
@@ -251,8 +234,8 @@ const medicalLink = uploadPdf(
     data.initialAction || '',
     data.urgencyLevel || '',
     data.observationNote || '',
-    disabilityLink|| '',
-    medicalLink|| ''
+    disabilityLink || '',
+    medicalLink || ''
   ]);
 
   return {
@@ -261,14 +244,33 @@ const medicalLink = uploadPdf(
   };
 }
 
-function getSS_() {
-  if (SPREADSHEET_ID && SPREADSHEET_ID !== 'PUT_SPREADSHEET_ID_HERE') {
-    return SpreadsheetApp.openById(SPREADSHEET_ID);
+function uploadPdf_(base64, fileName, folderId) {
+  if (!base64) return '';
+
+  if (!folderId || folderId.includes('ใส่ Folder ID')) {
+    throw new Error('ยังไม่ได้ใส่ Folder ID สำหรับเก็บไฟล์ PDF');
   }
 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  if (!ss) throw new Error('ไม่พบ Spreadsheet กรุณาใส่ SPREADSHEET_ID');
-  return ss;
+  const safeName = fileName || ('document_' + new Date().getTime() + '.pdf');
+
+  const blob = Utilities.newBlob(
+    Utilities.base64Decode(base64),
+    MimeType.PDF,
+    safeName
+  );
+
+  const file = DriveApp.getFolderById(folderId).createFile(blob);
+
+  file.setSharing(
+    DriveApp.Access.ANYONE_WITH_LINK,
+    DriveApp.Permission.VIEW
+  );
+
+  return file.getUrl();
+}
+
+function getSS_() {
+  return SpreadsheetApp.openById(SPREADSHEET_ID);
 }
 
 function createSheetIfNotExists_(ss, sheetName, headers) {
@@ -277,18 +279,32 @@ function createSheetIfNotExists_(ss, sheetName, headers) {
     sh = ss.insertSheet(sheetName);
   }
 
-  if (sh.getLastRow() === 0) {
+  ensureHeaders_(sh, headers);
+}
+
+function ensureHeaders_(sh, headers) {
+  const lastCol = Math.max(sh.getLastColumn(), 1);
+  const oldHeaders = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(clean_);
+
+  if (sh.getLastRow() === 0 || oldHeaders.filter(Boolean).length === 0) {
     sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+  } else {
+    headers.forEach(header => {
+      if (!oldHeaders.includes(header)) {
+        const newCol = sh.getLastColumn() + 1;
+        sh.getRange(1, newCol).setValue(header);
+      }
+    });
   }
 
-  sh.getRange(1, 1, 1, headers.length)
+  const newLastCol = sh.getLastColumn();
+  sh.getRange(1, 1, 1, newLastCol)
     .setFontWeight('bold')
     .setBackground('#1565c0')
     .setFontColor('#ffffff')
     .setHorizontalAlignment('center');
 
   sh.setFrozenRows(1);
-  sh.autoResizeColumns(1, headers.length);
 }
 
 function output_(data, callback) {
@@ -321,41 +337,3 @@ function matchLevel_(sheetLevel, selectedLevel) {
 function arrayText_(arr) {
   return Array.isArray(arr) ? arr.join(', ') : '';
 }
-
-const DISABILITY_FOLDER_ID =
-'ใส่ Folder ID บัตรพิการ';
-
-const MEDICAL_FOLDER_ID =
-'ใส่ Folder ID ใบรับรองแพทย์';
-
-function uploadPdf(base64,fileName,folderId){
-
-  if(!base64) return '';
-
-  const blob = Utilities.newBlob(
-
-    Utilities.base64Decode(base64),
-
-    MimeType.PDF,
-
-    fileName
-
-  );
-
-  const file =
-  DriveApp.getFolderById(folderId)
-  .createFile(blob);
-
-  file.setSharing(
-
-    DriveApp.Access.ANYONE_WITH_LINK,
-
-    DriveApp.Permission.VIEW
-
-  );
-
-  return file.getUrl();
-
-}
-
-
