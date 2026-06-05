@@ -112,16 +112,8 @@
               <input type="hidden" id="teacherRole" required>
             </div>
             <div>
-              <label>
-  วิชาที่สอน / รายวิชาที่พบพฤติกรรม
-  <span style="color:#e67e22;font-size:14px;">
-    (สำหรับครูผู้สอนเท่านั้น)
-  </span>
-</label>
-
-<input type="text"
-       id="subject"
-       placeholder="ครูผู้สอนกรอกชื่อวิชาที่สอน เช่น การเขียนโปรแกรมเบื้องต้น">
+              <label>วิชาที่สอน / รายวิชาที่พบพฤติกรรม</label>
+              <input id="subjectName" placeholder="เช่น การเขียนโปรแกรมเบื้องต้น">
             </div>
             <div>
               <label>วันที่กรอก</label>
@@ -182,8 +174,17 @@
         <div class="section-title"><div class="num">3</div>บัตรประจำตัวคนพิการ</div>
         <div class="body">
           <label>นักเรียนมีบัตรประจำตัวคนพิการหรือไม่? <span class="req">*</span></label>
-          <div class="chips" id="cardChips"></div>
-          <input type="hidden" id="disabilityCardStatus" required>
+         <div id="cardUploadSection">
+
+  <label>แนบไฟล์บัตรประจำตัวคนพิการ (PDF)</label>
+
+  <input
+    type="file"
+    id="disabilityCardFile"
+    accept=".pdf"
+  >
+
+</div>
 
           <div id="cardDetail" class="hidden">
             <div class="divider"></div>
@@ -212,13 +213,18 @@
           <div class="divider"></div>
 
           <label>มีใบรับรองแพทย์ / เอกสารการวินิจฉัยหรือไม่? <span class="req">*</span></label>
-          <select id="medicalDocumentStatus" required>
-            <option value="">— เลือก —</option>
-            <option>มี</option>
-            <option>ไม่มี</option>
-            <option>ไม่ทราบ</option>
-            <option>อยู่ระหว่างดำเนินการ</option>
-          </select>
+         <div id="medicalUploadSection">
+
+  <label>แนบใบรับรองแพทย์ / เอกสารวินิจฉัย (PDF)</label>
+
+  <input
+    type="file"
+    id="medicalFile"
+    accept=".pdf"
+  >
+
+</div>
+
         </div>
       </section>
 
@@ -871,6 +877,55 @@ function escapeHtml(s){
     '"':'&quot;'
   }[m]));
 }
+
+async function fileToBase64(file) {
+
+  return new Promise((resolve,reject)=>{
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+
+      resolve(reader.result.split(',')[1]);
+
+    };
+
+    reader.onerror = reject;
+
+    reader.readAsDataURL(file);
+
+  });
+
+}
+
+const disabilityFile =
+document.getElementById('disabilityCardFile').files[0];
+
+const medicalFile =
+document.getElementById('medicalFile').files[0];
+
+let disabilityBase64 = '';
+let medicalBase64 = '';
+
+if(disabilityFile){
+
+  disabilityBase64 =
+  await fileToBase64(disabilityFile);
+
+}
+
+if(medicalFile){
+
+  medicalBase64 =
+  await fileToBase64(medicalFile);
+
+}
+
+payload.disabilityCardFile = disabilityBase64;
+payload.disabilityCardFileName = disabilityFile?.name || '';
+
+payload.medicalFile = medicalBase64;
+payload.medicalFileName = medicalFile?.name || '';
 </script>
 </body>
 </html>
